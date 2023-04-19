@@ -1,34 +1,91 @@
-/**
- * Some predefined delay values (in milliseconds).
- */
-export enum Delays {
-  Short = 500,
-  Medium = 2000,
-  Long = 5000,
-}
+type Fragment = string[];
 
-/**
- * Returns a Promise<string> that resolves after a given time.
- *
- * @param {string} name - A name.
- * @param {number=} [delay=Delays.Medium] - A number of milliseconds to delay resolution of the Promise.
- * @returns {Promise<string>}
- */
-function delayedHello(
-  name: string,
-  delay: number = Delays.Medium,
-): Promise<string> {
-  return new Promise((resolve: (value?: string) => void) =>
-    setTimeout(() => resolve(`Hello, ${name}`), delay),
-  );
-}
+type SplitMessagesOptions = {
+  limit?: number;
+  separator?: string;
+  getSuffix?: (index: number, total: number) => string;
+};
 
-// Please see the comment in the .eslintrc.json file about the suppressed rule!
-// Below is an example of how to use ESLint errors suppression. You can read more
-// at https://eslint.org/docs/latest/user-guide/configuring/rules#disabling-rules
+export const SPLIT_MESSAGES_DEFAULT_OPTIONS: SplitMessagesOptions = {
+  limit: 140,
+  separator: ' ',
+  getSuffix: (index, total) => `${index + 1}/${total}`,
+};
 
-// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-export async function greeter(name: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
-  // The name parameter should be of type string. Any is used only to trigger the rule.
-  return await delayedHello(name, Delays.Long);
-}
+const checkFitsIntoFragment = (
+  fragment: Fragment,
+  word: string,
+  { separator, limit }: SplitMessagesOptions,
+): boolean => {
+  const extendedFragment = [...fragment, word].join(separator);
+
+  return extendedFragment.length <= limit;
+};
+
+/* Разбивает сообщение на фрагменты по разделителю и лимиту с учетом суфикса */
+export const getMessageFragments = (
+  message: string,
+  options: SplitMessagesOptions,
+  total?: number,
+): Fragment[] => {
+  const { getSuffix, separator } = options;
+
+  const words = message.split(separator);
+
+  const messageFragments = words.reduce<Fragment[]>((fragments, word) => {
+    const lastFragmentIndex = fragments.length - 1;
+    const lastFragment = fragments[lastFragmentIndex];
+
+    if (!lastFragment) {
+      return [[word]];
+    }
+
+    const suffix = getSuffix?.(lastFragmentIndex, total);
+    const wordWithSuffix = suffix ? [word, suffix].join(separator) : word;
+
+    if (checkFitsIntoFragment(lastFragment, wordWithSuffix, options)) {
+      lastFragment.push(word);
+    } else {
+      fragments.push([word]);
+    }
+
+    return fragments;
+  }, []);
+
+  /* Проставляем суффиксы, если больше одного фрагмента */
+  if (getSuffix && total > 1) {
+    messageFragments.forEach((fragment, index) => {
+      const suffix = getSuffix(index, total);
+      fragment.push(suffix);
+    });
+  }
+
+  return messageFragments;
+};
+
+export const splitMessageIntoParts = (
+  text: string,
+  options: SplitMessagesOptions = {},
+): string[] => {
+  const config = { ...SPLIT_MESSAGES_DEFAULT_OPTIONS, ...options };
+  const { getSuffix: omitted, ...baseConfig } = config;
+
+  /* Получаем количество фрагментов текущей конфигурации без суфиксов */
+  let fragments = getMessageFragments(text, baseConfig);
+  let totalFragments = fragments.length;
+
+  /* Получаем фрагменты с проставленными суфиксами */
+  fragments = getMessageFragments(text, config, totalFragments);
+
+  /**
+   * Если количество фрагментов изменилось - нужно пересобрать с актуальным суфиксом
+   * пока количество фрагментов с прошлой итерации не станет равным текущему
+   */
+  while (totalFragments < fragments.length) {
+    totalFragments = fragments.length;
+    fragments = getMessageFragments(text, config, totalFragments);
+  }
+
+  /* Собираем фрагменты в сообщения */
+  return fragments.map((f) => f.join(config.separator));
+};

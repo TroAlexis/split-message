@@ -1,42 +1,44 @@
-import { Delays, greeter } from '../src/main.js';
+import {
+  SPLIT_MESSAGES_DEFAULT_OPTIONS,
+  splitMessageIntoParts,
+} from '../src/main.js';
+import { faker } from '@faker-js/faker';
 
-describe('greeter function', () => {
-  const name = 'John';
-  let hello: string;
+describe('splitMessageIntoParts', () => {
+  const checkMessagesLimit = (messages: string[]): void => {
+    messages.forEach((item) => {
+      expect(item.length).toBeLessThanOrEqual(
+        SPLIT_MESSAGES_DEFAULT_OPTIONS.limit,
+      );
+    });
+  };
 
-  let timeoutSpy: jest.SpyInstance;
+  it('возвращает элемент без суфикса, если помещается в один фрагмент', () => {
+    const text = 'Lorem ipsum dolor sit amet consectetur adipiscing elit';
+    const result = splitMessageIntoParts(text);
 
-  // Act before assertions
-  beforeAll(async () => {
-    // Read more about fake timers
-    // http://facebook.github.io/jest/docs/en/timer-mocks.html#content
-    // Jest 27 now uses "modern" implementation of fake timers
-    // https://jestjs.io/blog/2021/05/25/jest-27#flipping-defaults
-    // https://github.com/facebook/jest/pull/5171
-    jest.useFakeTimers();
-    timeoutSpy = jest.spyOn(global, 'setTimeout');
-
-    const p: Promise<string> = greeter(name);
-    jest.runOnlyPendingTimers();
-    hello = await p;
+    checkMessagesLimit(result);
+    expect(result).toEqual([
+      'Lorem ipsum dolor sit amet consectetur adipiscing elit',
+    ]);
   });
 
-  // Teardown (cleanup) after assertions
-  afterAll(() => {
-    timeoutSpy.mockRestore();
+  it('возвращает элементы с суфиксом при наличии нескольких фрагментов', () => {
+    const text =
+      'Lorem ipsum dolor sit amet consectetur adipiscing elit Nullam eleifend odio at magna pretium suscipit Nam commodo mauris felis ut suscipit velit efficitur eget Sed sit amet posuere risus';
+    const result = splitMessageIntoParts(text);
+
+    checkMessagesLimit(result);
+    expect(result).toEqual([
+      'Lorem ipsum dolor sit amet consectetur adipiscing elit Nullam eleifend odio at magna pretium suscipit Nam commodo mauris felis ut 1/2',
+      'suscipit velit efficitur eget Sed sit amet posuere risus 2/2',
+    ]);
   });
 
-  // Assert if setTimeout was called properly
-  it('delays the greeting by 2 seconds', () => {
-    expect(setTimeout).toHaveBeenCalledTimes(1);
-    expect(setTimeout).toHaveBeenLastCalledWith(
-      expect.any(Function),
-      Delays.Long,
-    );
-  });
+  it('корректно обрабатывает большие сообщения с потенциальным сдвигом из-за длины суфикса', () => {
+    const text = faker.lorem.words(100000);
+    const result = splitMessageIntoParts(text);
 
-  // Assert greeter result
-  it('greets a user with `Hello, {name}` message', () => {
-    expect(hello).toBe(`Hello, ${name}`);
+    checkMessagesLimit(result);
   });
 });
